@@ -21,6 +21,7 @@ import com.school.nfcadapter.usb.UsbEndpoints
 import com.school.nfcadapter.usb.UsbPermissionCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -41,6 +42,9 @@ internal class ConnectionManager(
     private val listener: ListenerProxy,
     private val config: NfcModuleConfig
 ) {
+    // limitedParallelism is stable in behavior but still gated behind the
+    // experimental-API opt-in in coroutines 1.8.x.
+    @OptIn(ExperimentalCoroutinesApi::class)
     private val moduleScope =
         CoroutineScope(SupervisorJob() + Dispatchers.Default.limitedParallelism(1))
 

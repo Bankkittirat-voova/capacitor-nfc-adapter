@@ -11,6 +11,9 @@ class NfcAdapterWeb extends WebPlugin {
   }
   async startScanning() {}
   async stopScanning() {}
+  async echo(options) {
+    return { value: (options && options.value) || '' };
+  }
 }
 
 /**

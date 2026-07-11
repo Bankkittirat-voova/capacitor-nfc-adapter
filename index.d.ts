@@ -20,6 +20,9 @@ export interface NfcAdapterPlugin {
   startScanning(): Promise<void>;
   stopScanning(): Promise<void>;
 
+  /** Bridge diagnostic: resolves with the same value it was called with. */
+  echo(options: { value: string }): Promise<{ value: string }>;
+
   /** uid: decimal of the reversed raw UID bytes ("uid_dec_reversed"), e.g. "696409595". */
   addListener(
     eventName: 'onCardScanned',

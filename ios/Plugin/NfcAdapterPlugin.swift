@@ -24,6 +24,12 @@ public class NfcAdapterPlugin: CAPPlugin, NfcScanListener {
         return created
     }
 
+    /// Bridge diagnostic: echoes { value } back so integrators can prove the
+    /// JS <-> native channel works before touching NFC hardware.
+    @objc func echo(_ call: CAPPluginCall) {
+        call.resolve(["value": call.getString("value") ?? ""])
+    }
+
     @objc func startScanning(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
             self.ensurePort().start()

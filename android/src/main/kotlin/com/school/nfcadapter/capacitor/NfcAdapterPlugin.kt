@@ -33,6 +33,13 @@ class NfcAdapterPlugin : Plugin(), NfcScanListener {
             port = it
         }
 
+    /** Bridge diagnostic: echoes { value } back so integrators can prove the
+     *  JS <-> native channel works before touching NFC hardware. */
+    @PluginMethod
+    fun echo(call: PluginCall) {
+        call.resolve(JSObject().put("value", call.getString("value") ?: ""))
+    }
+
     @PluginMethod
     fun startScanning(call: PluginCall) {
         ensurePort().start()
