@@ -1,0 +1,21 @@
+{
+  "comment": "Cross-platform golden vectors for the uid_dec_reversed contract: decimal of the reversed raw UID byte array. Values computed with an independent oracle (.NET System.Numerics.BigInteger). The FB5D8229 vector is the contract anchor fixed in the product specification. Loaded by the Kotlin suite (JVM), the Swift suite (XCTest) and the Node verification harness — green on all lanes proves byte-identical output across platforms.",
+  "valid": [
+    { "raw_hex": "FB5D8229", "uid_dec_reversed": "696409595", "note": "CONTRACT ANCHOR — reversed 29825DFB" },
+    { "raw_hex": "04A1B2C3", "uid_dec_reversed": "3283263748", "note": "4-byte, NXP-style 0x04 prefix" },
+    { "raw_hex": "00000000", "uid_dec_reversed": "0", "note": "all-zero edge (no padding: single 0)" },
+    { "raw_hex": "0000012C", "uid_dec_reversed": "738263040", "note": "leading zero bytes in raw" },
+    { "raw_hex": "DEADBEEF", "uid_dec_reversed": "4022250974", "note": "high-bit bytes (sign-safety check)" },
+    { "raw_hex": "04E1512A3B6C80", "uid_dec_reversed": "36147798387843332", "note": "7-byte double-size UID (exceeds Int32)" },
+    { "raw_hex": "00010203040506", "uid_dec_reversed": "1694364648734976", "note": "7-byte with leading zero byte" },
+    { "raw_hex": "04E1512A3B6C80FF1122", "uid_dec_reversed": "160892465901099059110148", "note": "10-byte triple-size UID (exceeds UInt64 — forces big-int path)" }
+  ],
+  "invalid_hex": [
+    "",
+    "FB5D82",
+    "FB5D8229AA",
+    "FB5D822",
+    "GG5D8229",
+    "0102030405060708090A0B"
+  ]
+}

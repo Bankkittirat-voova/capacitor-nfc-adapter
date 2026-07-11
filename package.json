@@ -1,0 +1,46 @@
+{
+  "name": "capacitor-nfc-adapter",
+  "version": "0.1.0",
+  "description": "Dual-platform NFC card UID scanner (Android USB Host readers + iOS CoreNFC) delivering the strict uid_dec_reversed format",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "android",
+    "ios",
+    "CapacitorNfcAdapter.podspec",
+    "shared-test-vectors",
+    "README.md"
+  ],
+  "scripts": {
+    "verify": "node verification/verify.mjs"
+  },
+  "keywords": [
+    "capacitor",
+    "capacitor-plugin",
+    "nfc",
+    "usb",
+    "ccid",
+    "corenfc",
+    "rfid"
+  ],
+  "author": "Voova Digital",
+  "license": "UNLICENSED",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Bankkittirat-voova/capacitor-nfc-adapter.git"
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^3.0.0"
+  },
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    },
+    "android": {
+      "src": "android"
+    }
+  }
+}

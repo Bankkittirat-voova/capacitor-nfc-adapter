@@ -1,0 +1,62 @@
+// Capacitor 3 plugin library build file. `npx cap sync` in the host app wires
+// this module into android/capacitor.settings.gradle, which also provides the
+// ':capacitor-android' project the bridge compiles against.
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        // Only applied when this module is built standalone; the host app's
+        // root project normally provides these classpaths.
+        if (project == rootProject) {
+            classpath("com.android.tools.build:gradle:8.2.1")
+        }
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24")
+    }
+}
+
+def safeExtGet(prop, fallback) {
+    rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
+}
+
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+android {
+    namespace "com.school.nfcadapter"
+    compileSdkVersion safeExtGet('compileSdkVersion', 35)
+
+    defaultConfig {
+        minSdkVersion safeExtGet('minSdkVersion', 24)
+        targetSdkVersion safeExtGet('targetSdkVersion', 35)
+        consumerProguardFiles 'consumer-rules.pro'
+    }
+
+    compileOptions {
+        // Capacitor 3 host apps build with AGP 7.x / JDK 11 toolchains.
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+    kotlinOptions {
+        jvmTarget = "11"
+    }
+}
+
+repositories {
+    google()
+    mavenCentral()
+    // Serial bridge drivers (CH340/CH341, CP210x, FTDI, PL2303, CDC-ACM)
+    maven { url "https://www.jitpack.io" }
+}
+
+dependencies {
+    implementation project(':capacitor-android')   // provided by the host app via cap sync
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
+    implementation "com.github.mik3y:usb-serial-for-android:3.7.3"
+
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1"
+    testImplementation 'org.json:json:20240303'   // loads ../shared-test-vectors/uid_vectors.json
+}

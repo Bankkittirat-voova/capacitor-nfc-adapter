@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- required="false" keeps the app installable on non-OTG devices (Play filtering).
+         Runtime support is probed via UsbCapability; the module degrades to a no-op. -->
+    <uses-feature
+        android:name="android.hardware.usb.host"
+        android:required="false" />
+
+    <application>
+        <!-- ACTION_USB_DEVICE_ATTACHED is delivered to activities only (never to
+             manifest receivers). This translucent trampoline receives it, forwards
+             the device to the running module (or cold-starts the app), and finishes
+             immediately. It renders nothing. -->
+        <activity
+            android:name="com.school.nfcadapter.usb.UsbAttachTrampolineActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/nfc_device_filter" />
+        </activity>
+    </application>
+</manifest>
