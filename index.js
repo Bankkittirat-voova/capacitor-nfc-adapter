@@ -26,7 +26,7 @@ class NfcAdapterWeb extends WebPlugin {
  * iOS: built-in antenna via CoreNFC (system scan sheet; students tap the phone).
  *
  * Usage:
- *   import { NfcAdapter } from 'capacitor-nfc-adapter';
+ *   import { NfcAdapter } from '@voova/capacitor-nfc-adapter';
  *
  *   const handle = NfcAdapter.addListener('onCardScanned', ({ uid }) => checkIn(uid));
  *   await NfcAdapter.startScanning();

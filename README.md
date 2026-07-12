@@ -41,7 +41,7 @@ ios/Sources/      Swift twin: NfcScannerPort, UidNormalizer, CoreNfcScannerPort
 ios/Tests/        XCTest suites (same golden vectors)
 ```
 
-## Capacitor usage (`capacitor-nfc-adapter`)
+## Capacitor usage (`@voova/capacitor-nfc-adapter`)
 
 The package is an autolinkable Capacitor 3 plugin: `android/` (Gradle library +
 `@CapacitorPlugin NfcAdapterPlugin`), `ios/Plugin/` (Swift `CAPPlugin` bridge
@@ -50,7 +50,7 @@ root), `index.js` entry point using `registerPlugin('NfcAdapter')` with a no-op
 web fallback for `ionic serve`.
 
 ```ts
-import { NfcAdapter } from 'capacitor-nfc-adapter';
+import { NfcAdapter } from '@voova/capacitor-nfc-adapter';
 
 const handle = NfcAdapter.addListener('onCardScanned', ({ uid }) => checkIn(uid)); // "696409595"
 await NfcAdapter.startScanning();

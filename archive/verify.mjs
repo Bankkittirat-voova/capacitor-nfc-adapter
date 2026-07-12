@@ -3,7 +3,7 @@
 // tests incl. the real ACR1255U-J1 ATR) once a working JDK/Android toolchain
 // became available — see commit ab355c1. Kept for reference; not maintained.
 // =============================================================================
-// nfc-adapter — executable verification harness (Node.js, zero dependencies)
+// @voova/capacitor-nfc-adapter — executable verification harness (Node.js, zero deps)
 //
 // This machine has no JDK/Android SDK/Xcode, so this harness transliterates the
 // EXACT algorithms from the Kotlin and Swift sources and executes them against:
