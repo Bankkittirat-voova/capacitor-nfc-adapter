@@ -1,0 +1,9 @@
+# npm's "files" whitelist in package.json does NOT apply .gitignore inside
+# whitelisted directories — without this file, android/build/ leaks into the
+# published tarball after any local gradle build.
+android/build/
+android/.gradle/
+android/local.properties
+ios/Pods/
+ios/build/
+*.tgz
