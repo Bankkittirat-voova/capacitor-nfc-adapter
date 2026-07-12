@@ -1,4 +1,8 @@
 // =============================================================================
+// ARCHIVED 2026-07-12: superseded by the JVM unit tests (android/src/test, 42
+// tests incl. the real ACR1255U-J1 ATR) once a working JDK/Android toolchain
+// became available — see commit ab355c1. Kept for reference; not maintained.
+// =============================================================================
 // nfc-adapter — executable verification harness (Node.js, zero dependencies)
 //
 // This machine has no JDK/Android SDK/Xcode, so this harness transliterates the
@@ -14,7 +18,7 @@
 //     generation-token design.
 //
 // The Kotlin (src/test) and Swift (ios/Tests) suites contain the same cases
-// for CI lanes with real toolchains. Run:  node verification/verify.mjs
+// for CI lanes with real toolchains. Run:  node archive/verify.mjs
 // =============================================================================
 
 import { readFileSync } from 'node:fs';

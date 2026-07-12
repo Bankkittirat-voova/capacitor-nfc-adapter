@@ -14,7 +14,7 @@
     "README.md"
   ],
   "scripts": {
-    "verify": "node verification/verify.mjs"
+    "verify": "node archive/verify.mjs"
   },
   "keywords": [
     "capacitor",

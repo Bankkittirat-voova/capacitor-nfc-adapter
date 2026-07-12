@@ -22,7 +22,7 @@ onCardScanned() receives :  "696409595"
 Pinned by `shared-test-vectors/uid_vectors.json` (values computed with an
 independent .NET BigInteger oracle) across three test lanes: Kotlin/JVM
 (`src/test`), Swift/XCTest (`ios/Tests`) and the toolchain-free Node harness
-(`verification/verify.mjs`, 69 checks — run with `node verification/verify.mjs`).
+(`archive/verify.mjs`, 69 checks — run with `node archive/verify.mjs`).
 
 ## Layout
 
@@ -99,7 +99,7 @@ Android-only; communicate this to operations before hardware purchasing.
 
 ## Testing without hardware
 
-- `verification/verify.mjs` — runs anywhere Node exists; exercises normalizers,
+- `archive/verify.mjs` — runs anywhere Node exists; exercises normalizers,
   CCID validation chain, engine state machines, serial assembly, router, and
   the vibration-storm/generation-token model.
 - Kotlin suite — pure classes have zero Android imports; runs as plain JVM

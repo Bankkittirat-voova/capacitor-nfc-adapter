@@ -23,7 +23,7 @@ onCardScanned delivers   :  { uid: "696409595" }
 - **Web / `ionic serve`**: safe no-op fallback, `isSupported()` reports `false`.
 
 Core logic is pinned by `shared-test-vectors/uid_vectors.json` and the
-toolchain-free harness: `node verification/verify.mjs` (69 checks).
+toolchain-free harness (archived, superseded by the JVM tests): `node archive/verify.mjs` (69 checks).
 
 ---
 
@@ -238,13 +238,49 @@ Notes:
 
 ## 6. Runbook — first thing to check per symptom
 
-| Symptom | First check |
+Symptoms keyed to the `NfcDiag` checkpoint chain (section 5). Find the LAST
+checkpoint that appeared; the failure lives at the first missing one.
+
+| Symptom (checkpoint missing/wrong) | First thing to check |
 |---|---|
-| No permission dialog, nothing in log on plug-in | `adb logcat -s NfcDiag` shows no `[USB] device attached`? Cable/OTG problem or phone lacks USB Host — try another cable/port. If attached but `route decision: Unsupported`, reader is neither CCID class 0x0B nor a known serial bridge: send VID/PID from the log line to the plugin team. |
-| Permission dialog every plug-in | Driver must tick "Always allow" on the dialog; also confirm the device matched `nfc_device_filter.xml` (class 11 or listed VID/PID) — filter match is what enables the remembered grant + auto-launch. |
-| Scan not registering (reader lit, no beep) | Unplug/replug the reader first. Then check log: `ATR received` but `read rejected`? Card type may not support the GET UID pseudo-APDU — capture the log and escalate. |
-| `session dead: ... consecutive transfer failures` repeating | Power problem: phone can't drive the reader. Use a powered USB hub / Y-cable; the module also raises `POWER_SUSPECTED` after repeated brownouts. |
-| Wrong number vs roster | Plugin is contract-pinned (`FB5D8229` → `"696409595"`, see `shared-test-vectors/uid_vectors.json`). Compare the `[UID] raw=...` log line against the roster's stored form — endianness mismatch is on the roster side. |
+| **No `[USB] device attached`** on plug-in | Physical layer: try another cable/OTG adapter/port, confirm the phone supports USB Host (`isSupported()` true). If other USB devices attach fine, the reader may be unpowered or asleep — power-cycle it. Nothing plugin-side can log before the OS sees the device. |
+| **`[USB] permission DENIED`** (or dialog never remembered) | Driver must tick "Always allow" on the system dialog. If the dialog re-appears every plug-in, the device did not match `res/xml/nfc_device_filter.xml` (class 11 or listed VID/PID) — filter match is what enables the remembered grant + auto-launch. Send the `[USB] device attached` VID/PID line to the plugin team. |
+| **No `[CCID] ATR received`** after a tap (session ready, then silence or `read rejected`/`seq mismatch`) | Unplug/replug the reader first (resyncs the CCID pipeline). If it repeats: card is not powering on in the RF field — hold the card flat and still for a full second; if `session dead: ... consecutive transfer failures` follows, treat as power problem (powered hub / bus charger; module raises `POWER_SUSPECTED` after repeated brownouts). |
+| **`[CCID]` shows wrong/absent slot status** (card on reader but log says card gone, or vice versa) | Almost always RF coupling: remove card sleeves/wallets, tap the reader's marked antenna zone. If status flaps with the card held still, capture the log — reader firmware quirk, escalate with the ATR line. |
+| **`[UID]` value mismatches the roster** | The plugin is contract-pinned: raw `FB5D8229` must deliver `"696409595"` (vectors: `shared-test-vectors/uid_vectors.json`). Compare the logged `raw=` bytes against the roster's stored form — a mismatch with correct raw bytes means the roster stores a different endianness/format, which is an app-side mapping question, not a scan failure. |
+
+## 6a. Phase B verification record — TODO (fill after hardware pass)
+
+> Do not integrate against claims in this section until the TODOs are
+> replaced with actual results. Nothing below is verified yet.
+
+**Compatibility note**
+
+| Field | Result |
+|---|---|
+| Reader model(s) tested | TODO (expected: ACR1255U-J1 via generic CCID class path) |
+| Android device(s) / OS version(s) tested | TODO |
+| Card type(s) tested | TODO (expected: MIFARE Classic 1K, 4-byte UID) |
+| B1 happy path | TODO |
+| B2 dwell (single event) | TODO |
+| B3 card flick (no partial UID) | TODO |
+| B4 cable pull mid-session | TODO |
+| B5 rapid re-tap debounce | TODO |
+| B6 card A → card B (no stale UID) | TODO |
+| B7 unplug/replug storm | TODO |
+| B8 background/foreground | TODO |
+| B9 RELEASE build happy path | TODO |
+| B10 second reader unit | TODO / not available |
+| Explicitly NOT tested | TODO (at minimum: non-CCID serial-bridge readers on real hardware; Android versions other than those listed above) |
+
+**Verified known-good point**
+
+- Commit: TODO (fill with the exact hash the hardware pass ran against)
+- Tag: TODO (e.g. `vX.Y.Z-phaseB-verified`)
+- Integration teams: pin this tag, never a moving `main`.
+
+**Confidence statement for Monday rollout**: TODO — must reference which of
+B1–B10 passed/failed, not a bare percentage.
 
 ## 7. Known limits / open items
 
