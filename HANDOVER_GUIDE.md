@@ -287,7 +287,15 @@ checkpoint that appeared; the failure lives at the first missing one.
 | B10 second reader unit | TODO / not available |
 | Explicitly NOT tested | TODO (at minimum: non-CCID serial-bridge readers on real hardware; Android versions other than those listed above) |
 
-**Verified known-good point**
+**Phase A release (logic verified — hardware handshake unverified)**
+
+- Release: <https://github.com/Bankkittirat-voova/capacitor-nfc-adapter/releases/tag/v0.2.0-phaseA-verified>
+- Tag `v0.2.0-phaseA-verified` = commit `f5fd5e4a` (42 JVM tests, build + lint clean;
+  tarball `voova-capacitor-nfc-adapter-0.2.0.tgz` attached to the release).
+- This release does NOT satisfy the verification record below — it predates the
+  hardware pass. Do not treat it as the Phase B known-good point.
+
+**Verified known-good point (Phase B)**
 
 - Commit: TODO (fill with the exact hash the hardware pass ran against)
 - Tag: TODO (e.g. `vX.Y.Z-phaseB-verified`)
