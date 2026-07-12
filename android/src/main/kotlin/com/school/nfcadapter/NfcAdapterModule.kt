@@ -9,6 +9,7 @@ import com.school.nfcadapter.api.NfcScannerPort
 import com.school.nfcadapter.api.NoopScannerPort
 import com.school.nfcadapter.core.ConnectionManager
 import com.school.nfcadapter.core.ListenerProxy
+import com.school.nfcadapter.diag.NfcDiag
 import com.school.nfcadapter.usb.UsbDetachReceiver
 import com.school.nfcadapter.usb.UsbPermissionCoordinator
 
@@ -29,7 +30,10 @@ class NfcAdapterModule private constructor(
             val pm = context.packageManager
             if (!pm.hasSystemFeature(PackageManager.FEATURE_USB_HOST)) return NoopScannerPort()
             if (context.getSystemService(Context.USB_SERVICE) !is UsbManager) return NoopScannerPort()
-            return NfcAdapterModule(context.applicationContext, config)
+            // Tee every module log line into logcat tag "NfcDiag" so field
+            // diagnostics need no app-side wiring (adb logcat -s NfcDiag).
+            val diagConfig = config.copy(logger = NfcDiag.tee(config.logger))
+            return NfcAdapterModule(context.applicationContext, diagConfig)
         }
     }
 

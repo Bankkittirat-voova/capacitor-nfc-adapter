@@ -19,6 +19,7 @@ import com.school.nfcadapter.transport.AndroidUsbTransport
 import com.school.nfcadapter.transport.TransferFailureException
 import com.school.nfcadapter.usb.UsbEndpoints
 import com.school.nfcadapter.usb.UsbPermissionCoordinator
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -69,6 +70,10 @@ internal class ConnectionManager(
 
     fun onDeviceAttached(device: UsbDevice) {
         moduleScope.launch {
+            config.logger(
+                "[USB] device attached: ${device.deviceName} VID=%04X PID=%04X class=0x%02X"
+                    .format(device.vendorId, device.productId, device.deviceClass)
+            )
             val now = SystemClock.elapsedRealtime()
             if (now < stormCooldownUntil) return@launch
             if (attachStorm.record(now)) {
@@ -94,14 +99,18 @@ internal class ConnectionManager(
 
     fun onDeviceDetached(device: UsbDevice) {
         moduleScope.launch {
+            config.logger("[USB] device detached: ${device.deviceName}")
             pendingAttach?.cancel()
             closeSession(device, unexpected = true)
         }
     }
 
     fun shutdown() {
+        // Cancel the scope only AFTER the teardown coroutine completes —
+        // cancelling first can kill the just-launched closeSession before it
+        // runs, leaking the open UsbDeviceConnection.
         moduleScope.launch { closeSession(null, unexpected = false) }
-        moduleScope.cancel()
+            .invokeOnCompletion { moduleScope.cancel() }
     }
 
     // --------------------------------------------------------------- session
@@ -114,7 +123,9 @@ internal class ConnectionManager(
         }
         val info = device.toInfo()
         val route = router.route(info)
+        config.logger("[USB] route decision: $route (interfaces=${info.interfaceClasses.joinToString { "0x%02X".format(it) }})")
         if (route is Route.Unsupported) {
+            config.logger("[ERROR] unsupported device — no CCID interface, no known serial-bridge VID/PID")
             listener.onReaderError(
                 ReaderError(
                     ReaderError.ErrorCode.UNSUPPORTED_DEVICE,
@@ -127,6 +138,7 @@ internal class ConnectionManager(
 
         listener.onReaderStateChanged(ReaderState.PERMISSION_PENDING)
         if (!permissions.ensurePermission(usbManager, device)) {
+            config.logger("[USB] permission DENIED (or dialog timed out)")
             listener.onReaderError(
                 ReaderError(
                     ReaderError.ErrorCode.PERMISSION_DENIED,
@@ -138,8 +150,10 @@ internal class ConnectionManager(
             return
         }
 
+        config.logger("[USB] permission granted")
         listener.onReaderStateChanged(ReaderState.INITIALIZING)
         val connection = usbManager.openDevice(device) ?: run {
+            config.logger("[ERROR] openDevice returned null (device gone or permission revoked)")
             listener.onReaderError(
                 ReaderError(ReaderError.ErrorCode.TRANSFER_FAILURE, "Could not open the scanner.", true)
             )
@@ -148,34 +162,47 @@ internal class ConnectionManager(
         }
 
         val generation = currentGeneration.incrementAndGet()
-        val session: Session? = when (route) {
-            is Route.Ccid -> {
-                val ep = UsbEndpoints.findCcid(device)
-                if (ep == null || !connection.claimInterface(ep.iface, true)) {
-                    connection.close(); null
-                } else {
-                    Session(
-                        device, connection, ep.iface,
-                        CcidReaderHandler(AndroidUsbTransport(connection, ep.bulkIn, ep.bulkOut), config),
-                        generation
-                    )
+        // try/catch: any unexpected throw from endpoint discovery / the serial
+        // prober / a handler constructor must still close the open connection.
+        val session: Session? = try {
+            when (route) {
+                is Route.Ccid -> {
+                    val ep = UsbEndpoints.findCcid(device)
+                    if (ep == null || !connection.claimInterface(ep.iface, true)) {
+                        config.logger(
+                            if (ep == null) "[ERROR] no CCID bulk-in/bulk-out endpoint pair found"
+                            else "[ERROR] claimInterface failed on the CCID interface"
+                        )
+                        connection.close(); null
+                    } else {
+                        Session(
+                            device, connection, ep.iface,
+                            CcidReaderHandler(AndroidUsbTransport(connection, ep.bulkIn, ep.bulkOut), config),
+                            generation
+                        )
+                    }
                 }
-            }
-            is Route.Serial -> {
-                val driver = UsbSerialProber.getDefaultProber().probeDevice(device)
-                if (driver == null || driver.ports.isEmpty()) {
-                    connection.close(); null
-                } else {
-                    Session(
-                        device, connection, null,
-                        SerialReaderHandler(driver.ports[0], connection, AsciiHexLineProfile(), config),
-                        generation
-                    )
+                is Route.Serial -> {
+                    val driver = UsbSerialProber.getDefaultProber().probeDevice(device)
+                    if (driver == null || driver.ports.isEmpty()) {
+                        config.logger("[ERROR] serial prober found no driver/port for this device")
+                        connection.close(); null
+                    } else {
+                        Session(
+                            device, connection, null,
+                            SerialReaderHandler(driver.ports[0], connection, AsciiHexLineProfile(), config),
+                            generation
+                        )
+                    }
                 }
+                is Route.BrandA ->
+                    Session(device, connection, null, BrandAHandlerHook(device, connection, config), generation)
+                Route.Unsupported -> null // unreachable — handled above
             }
-            is Route.BrandA ->
-                Session(device, connection, null, BrandAHandlerHook(device, connection, config), generation)
-            Route.Unsupported -> null // unreachable — handled above
+        } catch (e: Exception) {
+            config.logger("[ERROR] session setup threw ${e.javaClass.simpleName}: ${e.message}")
+            runCatching { connection.close() }
+            null
         }
 
         if (session == null) {
@@ -193,28 +220,39 @@ internal class ConnectionManager(
                     onSessionDead(session, "handler initialize() failed")
                     return@launch
                 }
+                config.logger("[USB] session ready (generation=${session.generation}) — standby, waiting for tap")
                 notifyIfCurrent(session) { listener.onReaderStateChanged(ReaderState.STANDBY) }
                 session.handler.runPollingLoop { rawUid ->
                     // Generation guard: a loop orphaned by a newer session must not emit.
                     if (session.generation != currentGeneration.get()) return@runPollingLoop
                     val uid = UidNormalizer.decReversed(rawUid)
                     if (uid == null) {
+                        config.logger("[ERROR] malformed UID discarded (raw=${hex(rawUid)})")
                         listener.onReaderError(
                             ReaderError(ReaderError.ErrorCode.PARTIAL_READ, "Discarded malformed card read.", true)
                         )
                         return@runPollingLoop
                     }
+                    config.logger("[UID] raw=${hex(rawUid)} -> uid_dec_reversed=$uid")
                     listener.onCardScanned(uid)
                 }
             } catch (e: TransferFailureException) {
                 onSessionDead(session, e.message ?: "transfer failure")
+            } catch (e: CancellationException) {
+                throw e   // normal teardown — never swallow cancellation
+            } catch (e: Exception) {
+                // A SupervisorJob child with no handler would crash the app on
+                // any unexpected throw (OEM USB stack quirks). Contain it.
+                onSessionDead(session, "unexpected ${e.javaClass.simpleName}: ${e.message}")
             }
         }
     }
 
+    private fun hex(bytes: ByteArray) = bytes.joinToString(" ") { "%02X".format(it) }
+
     /** A polling loop declared its link dead — reroute to the ordinary teardown. */
     private fun onSessionDead(session: Session, reason: String) {
-        config.logger("session dead: $reason")
+        config.logger("[ERROR] session dead: $reason")
         moduleScope.launch { closeSession(session.device, unexpected = true) }
     }
 

@@ -32,6 +32,9 @@ internal class UsbPermissionCoordinator(private val context: Context) {
         private const val DIALOG_TIMEOUT_MS = 60_000L
     }
 
+    // Written from the module dispatcher (ensurePermission), completed from the
+    // main thread (broadcast onReceive) — must be volatile for visibility.
+    @Volatile
     private var pending: CompletableDeferred<Boolean>? = null
 
     private val receiver = object : BroadcastReceiver() {

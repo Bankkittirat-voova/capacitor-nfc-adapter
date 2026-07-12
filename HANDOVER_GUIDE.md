@@ -200,10 +200,58 @@ suspecting the plugin — the roster may store a different endianness.
 
 ---
 
-## 5. Known limits / open items
+## 5. Field diagnostics — zero coding required
+
+Every stage of the scan chain logs a checkpoint to logcat tag **`NfcDiag`**
+automatically (wired inside the plugin — nothing to enable):
+
+```
+[USB]   device attached: /dev/bus/usb/001/002 VID=072F PID=223B class=0x00
+[USB]   route decision: Ccid (interfaces=0x0B)
+[USB]   permission granted
+[USB]   session ready (generation=1) — standby, waiting for tap
+[CCID]  ATR received (20 bytes): 3B 8F 80 01 80 4F 0C ... 6A — parsed ok, card active
+[UID]   raw=FB 5D 82 29 -> uid_dec_reversed=696409595
+[ERROR] <anything that failed, with reason>
+```
+
+Watch it live:
+
+```bash
+adb logcat -s NfcDiag
+```
+
+If the app's scanning session is not running (or you want to test the reader
+in isolation), start a standalone diagnostic session — **debug builds only**:
+
+```bash
+adb shell am broadcast -n <applicationId>/com.school.nfcadapter.diag.NfcDiagReceiver -a com.school.nfcadapter.DIAG_START
+# ... plug reader in, tap card, read the NfcDiag log ...
+adb shell am broadcast -n <applicationId>/com.school.nfcadapter.diag.NfcDiagReceiver -a com.school.nfcadapter.DIAG_STOP
+```
+
+Notes:
+- Send `DIAG_STOP` before the app itself starts scanning (two sessions would
+  fight over the USB interface).
+- In **release** builds the receiver is inert by design; the `NfcDiag`
+  checkpoint log still flows whenever the app scans normally.
+
+## 6. Runbook — first thing to check per symptom
+
+| Symptom | First check |
+|---|---|
+| No permission dialog, nothing in log on plug-in | `adb logcat -s NfcDiag` shows no `[USB] device attached`? Cable/OTG problem or phone lacks USB Host — try another cable/port. If attached but `route decision: Unsupported`, reader is neither CCID class 0x0B nor a known serial bridge: send VID/PID from the log line to the plugin team. |
+| Permission dialog every plug-in | Driver must tick "Always allow" on the dialog; also confirm the device matched `nfc_device_filter.xml` (class 11 or listed VID/PID) — filter match is what enables the remembered grant + auto-launch. |
+| Scan not registering (reader lit, no beep) | Unplug/replug the reader first. Then check log: `ATR received` but `read rejected`? Card type may not support the GET UID pseudo-APDU — capture the log and escalate. |
+| `session dead: ... consecutive transfer failures` repeating | Power problem: phone can't drive the reader. Use a powered USB hub / Y-cable; the module also raises `POWER_SUSPECTED` after repeated brownouts. |
+| Wrong number vs roster | Plugin is contract-pinned (`FB5D8229` → `"696409595"`, see `shared-test-vectors/uid_vectors.json`). Compare the `[UID] raw=...` log line against the roster's stored form — endianness mismatch is on the roster side. |
+
+## 7. Known limits / open items
 
 | Item | Status |
 |---|---|
+| Real-hardware handshake | **UNVERIFIED** — logic and configuration verified (42 JVM tests incl. the real 20-byte ACR1255U-J1 ATR, build + lint clean); physical ACR1255U-J1 + test-card pass is Phase B |
+| Non-CCID serial-bridge readers | VID/PID matrix present (CH340/CH341/CH9102, CP210x, FTDI, PL2303 families) but no physical unit tested |
 | Brand A SDK readers | Hook present (`handler/branda/`), inert until VID/PID configured in `NfcModuleConfig` + `nfc_device_filter.xml` |
 | iOS silent background scanning | Impossible by Apple design — system sheet shows, sessions ~60 s (auto-restarted). Communicate to operations. |
 | On-device soak test | Pending: cold plug, hot plug, 100-tap soak, mid-tap unplug on the two most common fleet phones |
@@ -211,7 +259,7 @@ suspecting the plugin — the roster may store a different endianness.
 
 ---
 
-## 6. Rollback
+## 8. Rollback
 
 Everything is additive. To back the integration out of the staff app:
 

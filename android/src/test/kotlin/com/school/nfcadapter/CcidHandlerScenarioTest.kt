@@ -27,7 +27,15 @@ class CcidHandlerScenarioTest {
     private val uidA = byteArrayOf(0xFB.toByte(), 0x5D, 0x82.toByte(), 0x29)
     private val uidB = byteArrayOf(0x04, 0xA1.toByte(), 0xB2.toByte(), 0xC3.toByte())
     private val sw9000 = byteArrayOf(0x90.toByte(), 0x00)
-    private val atr = byteArrayOf(0x3B, 0x81.toByte(), 0x80.toByte(), 0x01)
+
+    /** REAL 20-byte ATR captured from an ACR1255U-J1 session with a MIFARE
+     *  Classic 1K card (PC/SC pt.3 contactless storage-card form, TCK=0x6A):
+     *  3B 8F 80 01 80 4F 0C A0 00 00 03 06 03 00 01 00 00 00 00 6A */
+    private val atr = byteArrayOf(
+        0x3B, 0x8F.toByte(), 0x80.toByte(), 0x01, 0x80.toByte(), 0x4F, 0x0C,
+        0xA0.toByte(), 0x00, 0x00, 0x03, 0x06, 0x03, 0x00, 0x01,
+        0x00, 0x00, 0x00, 0x00, 0x6A
+    )
 
     private fun slotStatus(present: Boolean) = ByteArray(10).also {
         it[0] = 0x81.toByte()
@@ -137,6 +145,25 @@ class CcidHandlerScenarioTest {
             )
         )
         assertEquals("corrupted read must never emit", 0, emissions.size)
+    }
+
+    @Test
+    fun staleSeqFrameIsDiscardedAndLoopRecovers() {
+        // A frame with a non-matching bSeq (left over from a timed-out command)
+        // must count as a failed poll, not desync the tap state machine.
+        val stale = slotStatus(true).also { it[6] = 0x63 }   // wrong seq on purpose
+        val (emissions, _) = runScenario(
+            listOf(
+                Reply(slotStatus(false)),
+                ScriptedUsbTransport.Step.RawReply(stale),   // discarded: seq mismatch
+                Reply(slotStatus(true)),                     // genuine tap
+                Reply(powerOnAck()), Reply(uidBlock(uidA)), Reply(uidBlock(uidA)),
+                Reply(slotStatus(false)),
+                Disconnect
+            )
+        )
+        assertEquals(1, emissions.size)
+        assertArrayEquals(uidA, emissions[0])
     }
 
     @Test

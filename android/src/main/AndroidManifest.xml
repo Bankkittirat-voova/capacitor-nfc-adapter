@@ -26,5 +26,17 @@
                 android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
                 android:resource="@xml/nfc_device_filter" />
         </activity>
+
+        <!-- Field-diagnostic entry point (debuggable builds only; see NfcDiagReceiver).
+             DUMP permission = reachable from adb shell, not from ordinary apps. -->
+        <receiver
+            android:name="com.school.nfcadapter.diag.NfcDiagReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="com.school.nfcadapter.DIAG_START" />
+                <action android:name="com.school.nfcadapter.DIAG_STOP" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

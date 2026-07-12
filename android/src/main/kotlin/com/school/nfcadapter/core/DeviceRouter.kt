@@ -31,19 +31,34 @@ class DeviceRouter(private val config: NfcModuleConfig = NfcModuleConfig()) {
         const val USB_CLASS_CSCID = 0x0B   // CCID smart-card reader
         const val USB_CLASS_CDC = 0x02     // CDC-ACM serial
 
-        /** (VID to PID) -> chip family. Vendor-specific class devices are only
-         *  identifiable this way. Mirrors res/xml/nfc_device_filter.xml. */
+        /** (VID to PID) -> chip family. ONLY for vendor-specific-class serial
+         *  bridges the OS cannot identify by USB class; CCID readers never
+         *  belong here (class 0x0B matching catches them all). Every entry must
+         *  be supported by usb-serial-for-android's default prober and mirrored
+         *  in res/xml/nfc_device_filter.xml. */
         val SERIAL_BRIDGES: Map<Pair<Int, Int>, String> = mapOf(
+            // WCH
             (0x1A86 to 0x7523) to "CH340",
             (0x1A86 to 0x5523) to "CH341",
-            (0x10C4 to 0xEA60) to "CP210x",
-            (0x10C4 to 0xEA70) to "CP210x",
-            (0x0403 to 0x6001) to "FTDI",
-            (0x0403 to 0x6010) to "FTDI",
-            (0x0403 to 0x6011) to "FTDI",
-            (0x0403 to 0x6014) to "FTDI",
-            (0x0403 to 0x6015) to "FTDI",
-            (0x067B to 0x2303) to "PL2303"
+            (0x1A86 to 0x55D4) to "CH9102",
+            // Silicon Labs
+            (0x10C4 to 0xEA60) to "CP210x",   // CP2102/2103/2104/2109
+            (0x10C4 to 0xEA70) to "CP210x",   // CP2105 dual
+            (0x10C4 to 0xEA71) to "CP210x",   // CP2108 quad
+            // FTDI
+            (0x0403 to 0x6001) to "FTDI",     // FT232R
+            (0x0403 to 0x6010) to "FTDI",     // FT2232
+            (0x0403 to 0x6011) to "FTDI",     // FT4232
+            (0x0403 to 0x6014) to "FTDI",     // FT232H
+            (0x0403 to 0x6015) to "FTDI",     // FT230X/FT231X/FT234XD
+            // Prolific
+            (0x067B to 0x2303) to "PL2303",   // HX/HXD/TA...
+            (0x067B to 0x23A3) to "PL2303",   // GC
+            (0x067B to 0x23B3) to "PL2303",   // GB
+            (0x067B to 0x23C3) to "PL2303",   // GT
+            (0x067B to 0x23D3) to "PL2303",   // GL
+            (0x067B to 0x23E3) to "PL2303",   // GE
+            (0x067B to 0x23F3) to "PL2303"    // GS
         )
     }
 

@@ -102,6 +102,45 @@ class CcidProtocolTest {
         assertTrue(CcidProtocol.parseUidResponse(frame, frame.size) is CcidProtocol.UidResult.Reject)
     }
 
+    // ---------------------------------------------- real power-on ATR frames
+
+    /** REAL ATR from an ACR1255U-J1 + MIFARE Classic 1K working session — 20
+     *  bytes, not the 4-byte stub the mocks used before. Layout: 3B 8F 80 01
+     *  80 4F 0C A0 00 00 03 06 03 00 01 00 00 00 00, TCK 6A (XOR-verified). */
+    private val realAtr = byteArrayOf(
+        0x3B, 0x8F.toByte(), 0x80.toByte(), 0x01, 0x80.toByte(), 0x4F, 0x0C,
+        0xA0.toByte(), 0x00, 0x00, 0x03, 0x06, 0x03, 0x00, 0x01,
+        0x00, 0x00, 0x00, 0x00, 0x6A
+    )
+
+    @Test
+    fun realAcr1255PowerOnResponseParsesAsCardActive() {
+        val frame = dataBlock(realAtr)
+        assertEquals(true, CcidProtocol.parseSlotStatusPresent(frame, frame.size))
+    }
+
+    @Test
+    fun realAtrWithIccAbsentStatusIsCardGoneSignal() {
+        val frame = dataBlock(realAtr, iccStatus = 2)
+        assertEquals(false, CcidProtocol.parseSlotStatusPresent(frame, frame.size))
+    }
+
+    @Test
+    fun realAtrDataBlockCanNeverBeMistakenForAUid() {
+        // Desync guard: if an ATR DataBlock ever reached the UID parser (stale
+        // frame), the SW1SW2 check must reject it — 00 6A is not 90 00.
+        val frame = dataBlock(realAtr)
+        assertTrue(CcidProtocol.parseUidResponse(frame, frame.size) is CcidProtocol.UidResult.Reject)
+    }
+
+    @Test
+    fun realAtrTruncatedAtEveryCutPointNeverParsesAsPresent() {
+        val frame = dataBlock(realAtr)
+        for (cut in 0 until CcidProtocol.HEADER_LEN) {
+            assertEquals("cut at $cut", null, CcidProtocol.parseSlotStatusPresent(frame, cut))
+        }
+    }
+
     @Test
     fun slotStatusParsing() {
         val present = ByteArray(10).also { it[0] = 0x81.toByte(); it[7] = 0 }

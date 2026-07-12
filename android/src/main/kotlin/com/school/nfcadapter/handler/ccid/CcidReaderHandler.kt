@@ -56,13 +56,13 @@ class CcidReaderHandler(
                         CcidProtocol.UidResult.CardGone -> {
                             // Card flicked away mid-read: stay disarmed, silently
                             // wait for the next stable tap ("no beep = tap again").
-                            config.logger("CCID: card left field mid-read (flick) — discarded")
+                            config.logger("[CCID] card left field mid-read (flick) — discarded")
                         }
                         is CcidProtocol.UidResult.Reject -> {
                             // Arm anyway: one attempt per presence episode, so an
                             // unsupported card can't cause a retry storm.
                             cardPresent = true
-                            config.logger("CCID: read rejected: ${r.reason}")
+                            config.logger("[CCID] read rejected: ${r.reason}")
                         }
                     }
                 }
@@ -76,24 +76,34 @@ class CcidReaderHandler(
 
     /** @return present / absent, or null on transfer failure or malformed frame. */
     private fun pollPresence(inBuf: ByteArray): Boolean? {
-        if (transport.bulkOut(CcidProtocol.buildGetSlotStatus(nextSeq()), config.statusTimeoutMs) < 0) return null
+        val seq = nextSeq()
+        if (transport.bulkOut(CcidProtocol.buildGetSlotStatus(seq), config.statusTimeoutMs) < 0) return null
         val n = transport.bulkIn(inBuf, config.statusTimeoutMs)
         if (n < 0) return null
+        // Stale frame from an earlier timed-out command: treat as a transfer
+        // failure so the failure counter resyncs (or restarts) the session
+        // instead of livelocking one response behind the reader.
+        if (n >= CcidProtocol.HEADER_LEN && inBuf[6] != seq) return null
         return CcidProtocol.parseSlotStatusPresent(inBuf, n)
     }
 
     private fun readUidValidated(inBuf: ByteArray): CcidProtocol.UidResult {
         // 1) Power the card on (returns ATR in a DataBlock). Absence here = flick.
-        if (transport.bulkOut(CcidProtocol.buildIccPowerOn(nextSeq()), config.transferTimeoutMs) < 0) {
+        val seqPowerOn = nextSeq()
+        if (transport.bulkOut(CcidProtocol.buildIccPowerOn(seqPowerOn), config.transferTimeoutMs) < 0) {
             return CcidProtocol.UidResult.Reject("power-on write failed")
         }
         val nAtr = transport.bulkIn(inBuf, config.transferTimeoutMs)
         if (nAtr < 0) return CcidProtocol.UidResult.Reject("power-on read failed")
+        if (nAtr >= CcidProtocol.HEADER_LEN && inBuf[6] != seqPowerOn) {
+            return CcidProtocol.UidResult.Reject("power-on seq mismatch (stale frame)")
+        }
         when (CcidProtocol.parseSlotStatusPresent(inBuf, nAtr)) {
             false -> return CcidProtocol.UidResult.CardGone
             null -> return CcidProtocol.UidResult.Reject("malformed power-on response")
             true -> Unit
         }
+        config.logger("[CCID] ATR received (${nAtr - CcidProtocol.HEADER_LEN} bytes): ${hex(inBuf, CcidProtocol.HEADER_LEN, nAtr)} — parsed ok, card active")
 
         // 2) GET DATA (UID), fully validated.
         val first = xfrGetUid(inBuf)
@@ -109,12 +119,19 @@ class CcidReaderHandler(
     }
 
     private fun xfrGetUid(inBuf: ByteArray): CcidProtocol.UidResult {
-        val cmd = CcidProtocol.buildXfrBlock(nextSeq(), CcidProtocol.GET_UID_APDU)
+        val seq = nextSeq()
+        val cmd = CcidProtocol.buildXfrBlock(seq, CcidProtocol.GET_UID_APDU)
         if (transport.bulkOut(cmd, config.transferTimeoutMs) < 0) {
             return CcidProtocol.UidResult.Reject("XfrBlock write failed")
         }
         val n = transport.bulkIn(inBuf, config.transferTimeoutMs)
         if (n < 0) return CcidProtocol.UidResult.Reject("XfrBlock read failed")
+        if (n >= CcidProtocol.HEADER_LEN && inBuf[6] != seq) {
+            return CcidProtocol.UidResult.Reject("XfrBlock seq mismatch (stale frame)")
+        }
         return CcidProtocol.parseUidResponse(inBuf, n)
     }
+
+    private fun hex(buf: ByteArray, from: Int, to: Int) =
+        (from until to).joinToString(" ") { "%02X".format(buf[it]) }
 }

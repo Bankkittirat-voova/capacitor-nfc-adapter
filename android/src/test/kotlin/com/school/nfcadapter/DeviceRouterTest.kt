@@ -34,6 +34,23 @@ class DeviceRouterTest {
     }
 
     @Test
+    fun ccidReaderMatchesByClassWithoutAnyVidPidEntry() {
+        // ACR1255U-J1-style layout (ACS VID 0x072F): deviceClass 0, CCID at the
+        // interface level. Must route via class 0x0B alone — the VID/PID is
+        // deliberately NOT in any table.
+        assertTrue((0x072F to 0x223B) !in DeviceRouter.SERIAL_BRIDGES)
+        assertEquals(Route.Ccid, router.route(dev(0x072F, 0x223B, devClass = 0, ifaceClasses = listOf(0x0B))))
+    }
+
+    @Test
+    fun extendedSerialBridgeMatrix() {
+        assertEquals(Route.Serial("CH9102"), router.route(dev(0x1A86, 0x55D4)))
+        assertEquals(Route.Serial("CP210x"), router.route(dev(0x10C4, 0xEA71)))
+        assertEquals(Route.Serial("PL2303"), router.route(dev(0x067B, 0x23A3)))
+        assertEquals(Route.Serial("PL2303"), router.route(dev(0x067B, 0x23F3)))
+    }
+
+    @Test
     fun cdcAcmByClass() {
         assertEquals(Route.Serial("CDC-ACM"), router.route(dev(0x9999, 0x0001, ifaceClasses = listOf(0x02, 0x0A))))
     }
