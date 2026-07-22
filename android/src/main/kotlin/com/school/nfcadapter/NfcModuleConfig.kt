@@ -30,6 +30,12 @@ data class NfcModuleConfig(
     /** Serial: silence longer than this mid-frame means a partial read (card flick). */
     val serialInterByteGapMs: Long = 150,
 
+    /** PN532-over-UART command-driven readers: near-universal HSU baud. */
+    val pn532BaudRate: Int = 115200,
+    /** Settle time after asserting DTR: an ATmega-CDC bridge auto-resets and must
+     *  finish its bootloader before the handshake, or the first command races it. */
+    val pn532BootDelayMs: Long = 1800,
+
     /** Attach-storm detection (vehicle vibration / loose port). */
     val stormWindowMs: Long = 30_000,
     val stormThreshold: Int = 5,
@@ -42,6 +48,13 @@ data class NfcModuleConfig(
     /** Brand A routing — leave at -1 until the SDK's VID/PID is confirmed. */
     val brandAVendorId: Int = -1,
     val brandAProductIds: Set<Int> = emptySet(),
+
+    /**
+     * DEBUG / LOCAL ONLY. When true, full card identifiers (UID/ATR and the raw
+     * frames that carry them) are written to the log. Ships false: normal logs
+     * show only byte lengths, so a card's identity never lands in logcat.
+     */
+    val logSensitiveValues: Boolean = false,
 
     val logger: (String) -> Unit = {}
 )

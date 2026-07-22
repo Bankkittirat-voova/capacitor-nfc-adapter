@@ -1,0 +1,3 @@
+# JVM test harness build outputs — never committed.
+build/
+.gradle/

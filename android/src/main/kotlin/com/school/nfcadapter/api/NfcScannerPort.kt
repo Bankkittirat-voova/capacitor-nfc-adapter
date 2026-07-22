@@ -32,7 +32,25 @@ interface NfcScanListener {
 
     /** Non-fatal, human-readable diagnostics. Main thread. */
     fun onReaderError(error: ReaderError)
+
+    /**
+     * A USB reader was enumerated and routed (fired before the permission
+     * prompt). Diagnostic only — lets a debug/pilot UI show which physical
+     * device attached and which protocol path claimed it. Default no-op so
+     * existing/other-platform implementors need not override. Main thread.
+     */
+    fun onReaderAttached(info: ReaderAttachInfo) {}
 }
+
+/** Diagnostic snapshot of a freshly attached USB reader. */
+data class ReaderAttachInfo(
+    val vendorId: Int,
+    val productId: Int,
+    /** Protocol path chosen by the router, e.g. "CCID", "PN532_SERIAL", "SERIAL:CH340". */
+    val route: String,
+    val productName: String?,
+    val manufacturerName: String?
+)
 
 enum class ReaderState { DISCONNECTED, PERMISSION_PENDING, INITIALIZING, STANDBY, READING, ERROR }
 

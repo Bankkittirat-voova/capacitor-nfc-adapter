@@ -1,0 +1,54 @@
+// Minimal Kotlin/JVM test path for the pure (Android-free) core of the plugin.
+//
+// It reuses the real source files in ../android/src via an explicit allow-list —
+// no copies, no forks — so the tests exercise the exact production code that ships
+// in the Android library. Android-bound files (ConnectionManager, the CCID/PN532
+// USB handlers, the Capacitor plugin) are intentionally excluded; they need the
+// Android SDK / Capacitor host and are covered by on-device verification, not here.
+plugins {
+    id 'org.jetbrains.kotlin.jvm' version '1.9.24'
+}
+
+repositories {
+    mavenCentral()
+}
+
+def mainKotlin = '../android/src/main/kotlin'
+def testKotlin = '../android/src/test/kotlin'
+
+sourceSets {
+    main {
+        kotlin {
+            srcDirs = [mainKotlin]
+            // Android-free units only.
+            include 'com/school/nfcadapter/NfcModuleConfig.kt'
+            include 'com/school/nfcadapter/transport/UsbTransport.kt'
+            include 'com/school/nfcadapter/core/DeviceRouter.kt'
+            include 'com/school/nfcadapter/core/UidNormalizer.kt'
+            include 'com/school/nfcadapter/handler/serial/Pn532Frame.kt'
+            include 'com/school/nfcadapter/handler/serial/Pn532ReadEngine.kt'
+        }
+    }
+    test {
+        kotlin {
+            srcDirs = [testKotlin]
+            include 'com/school/nfcadapter/DeviceRouterTest.kt'
+            include 'com/school/nfcadapter/Pn532EngineScenarioTest.kt'
+            include 'com/school/nfcadapter/Pn532FrameTest.kt'
+        }
+    }
+}
+
+dependencies {
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1'
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1'
+    testImplementation 'junit:junit:4.13.2'
+}
+
+tasks.named('test') {
+    useJUnit()
+    testLogging {
+        events 'passed', 'failed', 'skipped'
+        exceptionFormat 'full'
+    }
+}

@@ -8,12 +8,14 @@ import android.hardware.usb.UsbManager
 import android.os.SystemClock
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import com.school.nfcadapter.NfcModuleConfig
+import com.school.nfcadapter.api.ReaderAttachInfo
 import com.school.nfcadapter.api.ReaderError
 import com.school.nfcadapter.api.ReaderState
 import com.school.nfcadapter.handler.NfcReaderHandler
 import com.school.nfcadapter.handler.branda.BrandAHandlerHook
 import com.school.nfcadapter.handler.ccid.CcidReaderHandler
 import com.school.nfcadapter.handler.serial.AsciiHexLineProfile
+import com.school.nfcadapter.handler.serial.Pn532SerialReaderHandler
 import com.school.nfcadapter.handler.serial.SerialReaderHandler
 import com.school.nfcadapter.transport.AndroidUsbTransport
 import com.school.nfcadapter.transport.TransferFailureException
@@ -124,6 +126,15 @@ internal class ConnectionManager(
         val info = device.toInfo()
         val route = router.route(info)
         config.logger("[USB] route decision: $route (interfaces=${info.interfaceClasses.joinToString { "0x%02X".format(it) }})")
+        listener.onReaderAttached(
+            ReaderAttachInfo(
+                vendorId = info.vendorId,
+                productId = info.productId,
+                route = routeName(route),
+                productName = runCatching { device.productName }.getOrNull(),
+                manufacturerName = runCatching { device.manufacturerName }.getOrNull()
+            )
+        )
         if (route is Route.Unsupported) {
             config.logger("[ERROR] unsupported device — no CCID interface, no known serial-bridge VID/PID")
             listener.onReaderError(
@@ -195,6 +206,19 @@ internal class ConnectionManager(
                         )
                     }
                 }
+                is Route.Pn532Serial -> {
+                    val driver = UsbSerialProber.getDefaultProber().probeDevice(device)
+                    if (driver == null || driver.ports.isEmpty()) {
+                        config.logger("[ERROR] serial prober found no driver/port for the PN532 reader")
+                        connection.close(); null
+                    } else {
+                        Session(
+                            device, connection, null,
+                            Pn532SerialReaderHandler(driver.ports[0], connection, config),
+                            generation
+                        )
+                    }
+                }
                 is Route.BrandA ->
                     Session(device, connection, null, BrandAHandlerHook(device, connection, config), generation)
                 Route.Unsupported -> null // unreachable — handled above
@@ -227,13 +251,13 @@ internal class ConnectionManager(
                     if (session.generation != currentGeneration.get()) return@runPollingLoop
                     val uid = UidNormalizer.decReversed(rawUid)
                     if (uid == null) {
-                        config.logger("[ERROR] malformed UID discarded (raw=${hex(rawUid)})")
+                        config.logger("[ERROR] malformed UID discarded (raw=${sens(rawUid)})")
                         listener.onReaderError(
                             ReaderError(ReaderError.ErrorCode.PARTIAL_READ, "Discarded malformed card read.", true)
                         )
                         return@runPollingLoop
                     }
-                    config.logger("[UID] raw=${hex(rawUid)} -> uid_dec_reversed=$uid")
+                    config.logger("[UID] raw=${sens(rawUid)} -> uid_dec_reversed=${if (config.logSensitiveValues) uid else "<masked ${uid.length} digits>"}")
                     listener.onCardScanned(uid)
                 }
             } catch (e: TransferFailureException) {
@@ -249,6 +273,10 @@ internal class ConnectionManager(
     }
 
     private fun hex(bytes: ByteArray) = bytes.joinToString(" ") { "%02X".format(it) }
+
+    /** Card identifiers are masked in normal logs; full value only when
+     *  config.logSensitiveValues is enabled (DEBUG/LOCAL ONLY). */
+    private fun sens(bytes: ByteArray) = if (config.logSensitiveValues) hex(bytes) else "<${bytes.size}B masked>"
 
     /** A polling loop declared its link dead — reroute to the ordinary teardown. */
     private fun onSessionDead(session: Session, reason: String) {
@@ -281,6 +309,14 @@ internal class ConnectionManager(
 
     private inline fun notifyIfCurrent(session: Session, block: () -> Unit) {
         if (session.generation == currentGeneration.get()) block()
+    }
+
+    private fun routeName(route: Route): String = when (route) {
+        Route.BrandA -> "BRAND_A"
+        Route.Ccid -> "CCID"
+        Route.Pn532Serial -> "PN532_SERIAL"
+        is Route.Serial -> "SERIAL:${route.chipFamily}"
+        Route.Unsupported -> "UNSUPPORTED"
     }
 
     private fun UsbDevice.toInfo() = UsbDeviceInfo(

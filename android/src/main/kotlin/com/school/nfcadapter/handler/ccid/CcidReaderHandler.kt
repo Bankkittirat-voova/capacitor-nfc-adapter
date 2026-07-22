@@ -103,7 +103,7 @@ class CcidReaderHandler(
             null -> return CcidProtocol.UidResult.Reject("malformed power-on response")
             true -> Unit
         }
-        config.logger("[CCID] ATR received (${nAtr - CcidProtocol.HEADER_LEN} bytes): ${hex(inBuf, CcidProtocol.HEADER_LEN, nAtr)} — parsed ok, card active")
+        config.logger("[CCID] ATR received (${nAtr - CcidProtocol.HEADER_LEN} bytes): ${sensAtr(inBuf, CcidProtocol.HEADER_LEN, nAtr)} — parsed ok, card active")
 
         // 2) GET DATA (UID), fully validated.
         val first = xfrGetUid(inBuf)
@@ -134,4 +134,9 @@ class CcidReaderHandler(
 
     private fun hex(buf: ByteArray, from: Int, to: Int) =
         (from until to).joinToString(" ") { "%02X".format(buf[it]) }
+
+    /** ATR bytes are masked in normal logs; full hex only when
+     *  config.logSensitiveValues is enabled (DEBUG/LOCAL ONLY). */
+    private fun sensAtr(buf: ByteArray, from: Int, to: Int) =
+        if (config.logSensitiveValues) hex(buf, from, to) else "<${to - from}B masked>"
 }

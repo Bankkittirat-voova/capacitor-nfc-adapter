@@ -56,6 +56,28 @@ class DeviceRouterTest {
     }
 
     @Test
+    fun pn532SerialWinsOverGenericCdcForKnownReader() {
+        // PCR532 / PM5 duplicator: ATmega-CDC bridge (Arduino Uno VID/PID), enumerates
+        // as generic CDC (class 0x02). Must take the command-driven PN532 route, NOT be
+        // mistaken for an ASCII-hex serial streamer (which yields zero scans).
+        assertTrue((0x2341 to 0x0043) in DeviceRouter.PN532_SERIAL_READERS)
+        assertEquals(Route.Pn532Serial, router.route(dev(0x2341, 0x0043, ifaceClasses = listOf(0x02, 0x0A))))
+    }
+
+    @Test
+    fun unknownCdcDeviceStillRoutesGenericSerial_notPn532() {
+        // A CDC device NOT in the PN532 table must keep the existing streaming route.
+        assertEquals(Route.Serial("CDC-ACM"), router.route(dev(0x1111, 0x2222, ifaceClasses = listOf(0x02))))
+    }
+
+    @Test
+    fun ccidReaderNeverStolenByPn532Route() {
+        // Scanner A regression guard: an ACS-style CCID reader must still route CCID
+        // even though this suite also exercises the new PN532 path.
+        assertEquals(Route.Ccid, router.route(dev(0x072F, 0x223F, devClass = 0, ifaceClasses = listOf(0x0B))))
+    }
+
+    @Test
     fun unknownDeviceUnsupported() {
         assertEquals(Route.Unsupported, router.route(dev(0x9999, 0x9999)))
     }

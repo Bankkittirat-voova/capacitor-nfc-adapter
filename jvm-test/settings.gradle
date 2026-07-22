@@ -1,0 +1,7 @@
+// Standalone JVM test harness for the pure-Kotlin core of capacitor-nfc-adapter.
+// Deliberately NOT part of the android/ library build: it compiles only the
+// Android-free units (router, UID normalizer, PN532 frame/engine) plus their
+// existing JUnit tests, so the protocol logic can be verified without an Android
+// SDK, an emulator, or the Capacitor host project. See build.gradle for the exact
+// file allow-list.
+rootProject.name = 'nfc-adapter-jvm-test'

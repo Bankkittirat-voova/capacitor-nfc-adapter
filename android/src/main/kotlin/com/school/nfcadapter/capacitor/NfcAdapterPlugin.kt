@@ -8,6 +8,7 @@ import com.getcapacitor.annotation.CapacitorPlugin
 import com.school.nfcadapter.NfcAdapterModule as CoreNfcAdapterModule
 import com.school.nfcadapter.api.NfcScanListener
 import com.school.nfcadapter.api.NfcScannerPort
+import com.school.nfcadapter.api.ReaderAttachInfo
 import com.school.nfcadapter.api.ReaderError
 import com.school.nfcadapter.api.ReaderState
 
@@ -80,6 +81,20 @@ class NfcAdapterPlugin : Plugin(), NfcScanListener {
                 .put("code", error.code.name)
                 .put("message", error.message)
                 .put("recoverable", error.recoverable)
+        )
+    }
+
+    override fun onReaderAttached(info: ReaderAttachInfo) {
+        notifyListeners(
+            "onReaderAttached",
+            JSObject()
+                .put("vid", info.vendorId)
+                .put("pid", info.productId)
+                .put("vidHex", "%04X".format(info.vendorId))
+                .put("pidHex", "%04X".format(info.productId))
+                .put("route", info.route)
+                .put("product", info.productName)
+                .put("manufacturer", info.manufacturerName)
         )
     }
 }

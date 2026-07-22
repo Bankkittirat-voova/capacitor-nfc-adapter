@@ -3,6 +3,7 @@ package com.school.nfcadapter.core
 import android.os.Handler
 import android.os.Looper
 import com.school.nfcadapter.api.NfcScanListener
+import com.school.nfcadapter.api.ReaderAttachInfo
 import com.school.nfcadapter.api.ReaderError
 import com.school.nfcadapter.api.ReaderState
 
@@ -27,5 +28,9 @@ internal class ListenerProxy : NfcScanListener {
 
     override fun onReaderError(error: ReaderError) {
         main.post { delegate?.onReaderError(error) }
+    }
+
+    override fun onReaderAttached(info: ReaderAttachInfo) {
+        main.post { delegate?.onReaderAttached(info) }
     }
 }

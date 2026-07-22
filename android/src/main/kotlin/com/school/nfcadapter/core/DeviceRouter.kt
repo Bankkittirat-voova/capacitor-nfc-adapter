@@ -21,6 +21,8 @@ data class UsbDeviceInfo(
 sealed interface Route {
     object BrandA : Route
     object Ccid : Route
+    /** Command-driven PN532-over-UART reader (must be commanded; does not stream). */
+    object Pn532Serial : Route
     data class Serial(val chipFamily: String) : Route
     object Unsupported : Route
 }
@@ -36,6 +38,17 @@ class DeviceRouter(private val config: NfcModuleConfig = NfcModuleConfig()) {
          *  belong here (class 0x0B matching catches them all). Every entry must
          *  be supported by usb-serial-for-android's default prober and mirrored
          *  in res/xml/nfc_device_filter.xml. */
+        /** Command-driven PN532-over-UART readers, matched by (VID to PID). The
+         *  first member is the PCR532/PM5 class (ATmega-CDC bridge, Arduino Uno
+         *  VID/PID). Membership only ROUTES the device to the PN532 handler; that
+         *  handler's GetFirmwareVersion handshake must still succeed before it
+         *  claims the device, so a non-PN532 device on the same VID/PID becomes a
+         *  failed session, never mis-driven. Not PM5-only — any PN532-UART reader
+         *  belongs here. */
+        val PN532_SERIAL_READERS: Set<Pair<Int, Int>> = setOf(
+            0x2341 to 0x0043    // Arduino Uno CDC (PCR532 / PM5 duplicator class)
+        )
+
         val SERIAL_BRIDGES: Map<Pair<Int, Int>, String> = mapOf(
             // WCH
             (0x1A86 to 0x7523) to "CH340",
@@ -70,6 +83,11 @@ class DeviceRouter(private val config: NfcModuleConfig = NfcModuleConfig()) {
 
         if (d.deviceClass == USB_CLASS_CSCID || USB_CLASS_CSCID in d.interfaceClasses)
             return Route.Ccid
+
+        // Command-driven PN532-UART readers first: they enumerate as generic CDC
+        // (class 0x02) so without this they would fall into Route.Serial and be
+        // treated as ASCII-hex streamers — which they are not, hence zero scans.
+        if ((d.vendorId to d.productId) in PN532_SERIAL_READERS) return Route.Pn532Serial
 
         SERIAL_BRIDGES[d.vendorId to d.productId]?.let { return Route.Serial(it) }
 

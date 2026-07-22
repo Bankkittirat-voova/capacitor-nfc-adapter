@@ -36,6 +36,7 @@ class NfcAdapterWeb extends WebPlugin {
  *   "onCardScanned"        -> { uid: string }            (uid_dec_reversed)
  *   "onReaderStateChanged" -> { state: string }          (DISCONNECTED/.../STANDBY/READING)
  *   "onReaderError"        -> { code, message, recoverable }
+ *   "onReaderAttached"     -> { vid, pid, vidHex, pidHex, route, product, manufacturer }  (diagnostic)
  */
 export const NfcAdapter = registerPlugin('NfcAdapter', {
   web: () => new NfcAdapterWeb(),
