@@ -59,7 +59,8 @@ class NfcAdapterPlugin : Plugin(), NfcScanListener {
     }
 
     override fun handleOnDestroy() {
-        port?.stop()
+        val current = port
+        if (current is CoreNfcAdapterModule) current.destroy() else current?.stop()
         port = null
         super.handleOnDestroy()
     }

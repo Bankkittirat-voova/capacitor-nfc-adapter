@@ -65,11 +65,22 @@ class NfcAdapterModule private constructor(
 
     override fun stop() {
         if (!started) return
+        deactivate()
+        connectionManager.shutdown()
+    }
+
+    /** Permanent plugin destruction; unlike stop(), the module cannot restart. */
+    internal fun destroy() {
+        deactivate()
+        connectionManager.destroy()
+    }
+
+    private fun deactivate() {
+        if (!started) return
         started = false
         if (ModuleRegistry.active === this) ModuleRegistry.active = null
         runCatching { appContext.unregisterReceiver(detachReceiver) }
         permissions.unregister()
-        connectionManager.shutdown()
     }
 
     /** Entry point used by UsbAttachTrampolineActivity. */

@@ -22,14 +22,6 @@ import com.school.nfcadapter.transport.TransferFailureException
 import com.school.nfcadapter.usb.UsbEndpoints
 import com.school.nfcadapter.usb.UsbPermissionCoordinator
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -45,15 +37,8 @@ internal class ConnectionManager(
     private val listener: ListenerProxy,
     private val config: NfcModuleConfig
 ) {
-    // limitedParallelism is stable in behavior but still gated behind the
-    // experimental-API opt-in in coroutines 1.8.x.
-    @OptIn(ExperimentalCoroutinesApi::class)
-    private val moduleScope =
-        CoroutineScope(SupervisorJob() + Dispatchers.Default.limitedParallelism(1))
-
+    private val lifecycle = RestartableLifecycle<Session>()
     private val currentGeneration = AtomicLong(0)
-    private var pendingAttach: Job? = null
-    private var activeSession: Session? = null
     private val attachStorm = SlidingWindowCounter(config.stormWindowMs, config.stormThreshold)
     private val brownout = SlidingWindowCounter(config.brownoutWindowMs, config.brownoutThreshold)
     private var stormCooldownUntil = 0L
@@ -64,20 +49,19 @@ internal class ConnectionManager(
         val connection: UsbDeviceConnection,
         val iface: UsbInterface?,
         val handler: NfcReaderHandler,
-        val generation: Long,
-        var pollingJob: Job? = null
+        val generation: Long
     )
 
     // ---------------------------------------------------------------- attach
 
     fun onDeviceAttached(device: UsbDevice) {
-        moduleScope.launch {
+        lifecycle.launchControl control@{
             config.logger(
                 "[USB] device attached: ${device.deviceName} VID=%04X PID=%04X class=0x%02X"
                     .format(device.vendorId, device.productId, device.deviceClass)
             )
             val now = SystemClock.elapsedRealtime()
-            if (now < stormCooldownUntil) return@launch
+            if (now < stormCooldownUntil) return@control
             if (attachStorm.record(now)) {
                 stormCooldownUntil = now + config.stormCooldownMs
                 listener.onReaderError(
@@ -88,38 +72,36 @@ internal class ConnectionManager(
                     )
                 )
                 listener.onReaderStateChanged(ReaderState.ERROR)
-                return@launch
+                return@control
             }
             // Vibration-bounce debounce: invest in init only for a stable attach.
-            pendingAttach?.cancel()
-            pendingAttach = launch {
-                delay(config.attachDebounceMs)
+            lifecycle.replacePendingAttach(config.attachDebounceMs) {
                 openSession(device)
             }
         }
     }
 
     fun onDeviceDetached(device: UsbDevice) {
-        moduleScope.launch {
+        lifecycle.launchControl {
             config.logger("[USB] device detached: ${device.deviceName}")
-            pendingAttach?.cancel()
+            lifecycle.cancelPendingAttach()
             closeSession(device, unexpected = true)
         }
     }
 
     fun shutdown() {
-        // Cancel the scope only AFTER the teardown coroutine completes —
-        // cancelling first can kill the just-launched closeSession before it
-        // runs, leaking the open UsbDeviceConnection.
-        moduleScope.launch { closeSession(null, unexpected = false) }
-            .invokeOnCompletion { moduleScope.cancel() }
+        lifecycle.temporaryStop { releaseSession(null, unexpected = false) }
+    }
+
+    fun destroy() {
+        lifecycle.destroy { releaseSession(null, unexpected = false) }
     }
 
     // --------------------------------------------------------------- session
 
     /** Runs on the module dispatcher only. */
     private suspend fun openSession(device: UsbDevice) {
-        if (activeSession != null) {
+        if (lifecycle.activeSession() != null) {
             config.logger("Second scanner ignored (one active session policy): ${device.deviceName}")
             return
         }
@@ -164,11 +146,12 @@ internal class ConnectionManager(
         config.logger("[USB] permission granted")
         listener.onReaderStateChanged(ReaderState.INITIALIZING)
         val connection = usbManager.openDevice(device) ?: run {
-            config.logger("[ERROR] openDevice returned null (device gone or permission revoked)")
-            listener.onReaderError(
-                ReaderError(ReaderError.ErrorCode.TRANSFER_FAILURE, "Could not open the scanner.", true)
+            reportReaderOpenFailure(
+                listener,
+                config.logger,
+                "openDevice returned null (device gone or permission revoked)",
+                "Could not open the scanner."
             )
-            listener.onReaderStateChanged(ReaderState.DISCONNECTED)
             return
         }
 
@@ -230,19 +213,26 @@ internal class ConnectionManager(
         }
 
         if (session == null) {
-            listener.onReaderError(
-                ReaderError(ReaderError.ErrorCode.TRANSFER_FAILURE, "Scanner initialization failed.", true)
+            reportReaderOpenFailure(
+                listener,
+                config.logger,
+                diagnostic = null,
+                userMessage = "Scanner initialization failed."
             )
-            listener.onReaderStateChanged(ReaderState.DISCONNECTED)
             return
         }
-        activeSession = session
+        if (!lifecycle.setActiveSession(session)) {
+            runCatching { session.handler.close() }
+            runCatching { session.iface?.let { session.connection.releaseInterface(it) } }
+            runCatching { session.connection.close() }
+            return
+        }
 
-        session.pollingJob = moduleScope.launch(Dispatchers.IO) {
+        lifecycle.launchPolling polling@{
             try {
                 if (!session.handler.initialize()) {
                     onSessionDead(session, "handler initialize() failed")
-                    return@launch
+                    return@polling
                 }
                 config.logger("[USB] session ready (generation=${session.generation}) — standby, waiting for tap")
                 notifyIfCurrent(session) { listener.onReaderStateChanged(ReaderState.STANDBY) }
@@ -257,7 +247,7 @@ internal class ConnectionManager(
                         )
                         return@runPollingLoop
                     }
-                    config.logger("[UID] raw=${sens(rawUid)} -> uid_dec_reversed=${if (config.logSensitiveValues) uid else "<masked ${uid.length} digits>"}")
+                    config.logger(formatUidLog(rawUid, uid, config.logSensitiveValues))
                     listener.onCardScanned(uid)
                 }
             } catch (e: TransferFailureException) {
@@ -281,16 +271,22 @@ internal class ConnectionManager(
     /** A polling loop declared its link dead — reroute to the ordinary teardown. */
     private fun onSessionDead(session: Session, reason: String) {
         config.logger("[ERROR] session dead: $reason")
-        moduleScope.launch { closeSession(session.device, unexpected = true) }
+        lifecycle.launchControl { closeSession(session.device, unexpected = true) }
     }
 
     /** Idempotent, single-owner teardown — the ONLY place resources are released. */
-    private fun closeSession(device: UsbDevice?, unexpected: Boolean) {
-        val session = activeSession ?: return
-        if (device != null && session.device.deviceId != device.deviceId) return
-        activeSession = null
+    private suspend fun closeSession(device: UsbDevice?, unexpected: Boolean) {
+        val active = lifecycle.activeSession() ?: return
+        if (device != null && active.device.deviceId != device.deviceId) return
+        lifecycle.stopPolling { releaseSession(device, unexpected) }
+    }
+
+    /** Runs after polling has been cancelled, while lifecycle teardown owns the session. */
+    private fun releaseSession(device: UsbDevice?, unexpected: Boolean) {
+        val session = lifecycle.takeActiveSession {
+            device == null || it.device.deviceId == device.deviceId
+        } ?: return
         currentGeneration.incrementAndGet()          // orphan all of this session's callbacks
-        session.pollingJob?.cancel()                 // cooperative: loop exits at next bounded transfer
         runCatching { session.handler.close() }
         runCatching { session.iface?.let { session.connection.releaseInterface(it) } }
         runCatching { session.connection.close() }   // unblocks any in-flight bulkTransfer

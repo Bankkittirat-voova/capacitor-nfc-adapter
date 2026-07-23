@@ -22,9 +22,16 @@ sourceSets {
             srcDirs = [mainKotlin]
             // Android-free units only.
             include 'com/school/nfcadapter/NfcModuleConfig.kt'
+            include 'com/school/nfcadapter/api/NfcScannerPort.kt'
             include 'com/school/nfcadapter/transport/UsbTransport.kt'
             include 'com/school/nfcadapter/core/DeviceRouter.kt'
+            include 'com/school/nfcadapter/core/ReaderLogFormatter.kt'
+            include 'com/school/nfcadapter/core/ReaderOpenFailureReporter.kt'
+            include 'com/school/nfcadapter/core/RestartableLifecycle.kt'
             include 'com/school/nfcadapter/core/UidNormalizer.kt'
+            include 'com/school/nfcadapter/handler/NfcReaderHandler.kt'
+            include 'com/school/nfcadapter/handler/ccid/CcidProtocol.kt'
+            include 'com/school/nfcadapter/handler/ccid/CcidReaderHandler.kt'
             include 'com/school/nfcadapter/handler/serial/Pn532Frame.kt'
             include 'com/school/nfcadapter/handler/serial/Pn532ReadEngine.kt'
         }
@@ -33,8 +40,13 @@ sourceSets {
         kotlin {
             srcDirs = [testKotlin]
             include 'com/school/nfcadapter/DeviceRouterTest.kt'
+            include 'com/school/nfcadapter/CcidLoggingPrivacyTest.kt'
             include 'com/school/nfcadapter/Pn532EngineScenarioTest.kt'
             include 'com/school/nfcadapter/Pn532FrameTest.kt'
+            include 'com/school/nfcadapter/ReaderLogFormatterTest.kt'
+            include 'com/school/nfcadapter/ReaderOpenFailureReporterTest.kt'
+            include 'com/school/nfcadapter/RestartableLifecycleTest.kt'
+            include 'com/school/nfcadapter/ScriptedUsbTransport.kt'
         }
     }
 }

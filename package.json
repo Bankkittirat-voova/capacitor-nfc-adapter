@@ -1,6 +1,6 @@
 {
   "name": "@voova/capacitor-nfc-adapter",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Dual-platform NFC card UID scanner (Android USB Host readers + iOS CoreNFC) delivering the strict uid_dec_reversed format",
   "main": "index.js",
   "types": "index.d.ts",
